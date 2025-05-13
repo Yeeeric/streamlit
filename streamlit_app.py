@@ -6,61 +6,67 @@ from streamlit_folium import st_folium
 from branca.colormap import LinearColormap
 
 st.set_page_config(layout="wide")
-st.title("🗺️ Mode Share by SA2 (Sydney)")
+st.title("🚶‍♂️ Mode Share (% of Total Travel) by SA2")
 
 # === Load data ===
 csv_path = "data/data_Mode_Census_UR_SA2.csv"
-geojson_path = "data/sa2.geojson"  # assumed simplified already
+geojson_path = "data/sa2.geojson"
 
 df = pd.read_csv(csv_path, dtype={"SA2_16_CODE": str})
 with open(geojson_path) as f:
     geojson_data = json.load(f)
 
-# === Sidebar filter ===
+# === Sidebar UI: Clean vertical checkbox list ===
+st.sidebar.markdown("### Select Mode(s):")
 available_modes = sorted(df["Mode"].unique())
-selected_modes = st.sidebar.multiselect("Select Mode(s):", available_modes, default=available_modes)
+selected_modes = []
+for mode in available_modes:
+    if st.sidebar.checkbox(mode, value=True):
+        selected_modes.append(mode)
 
-# === Aggregate mode share per SA2 ===
-filtered_df = df[df["Mode"].isin(selected_modes)]
-mode_summary = (
-    filtered_df
-    .groupby("SA2_16_CODE", as_index=False)["Persons"]
-    .sum()
-    .rename(columns={"Persons": "TotalPersons"})
-)
+# === Calculate % mode share per SA2 ===
 
-# === Build lookup for GeoJSON merge ===
-mode_map = mode_summary.set_index("SA2_16_CODE")["TotalPersons"].to_dict()
+# Total persons by SA2 (denominator)
+total_by_sa2 = df.groupby("SA2_16_CODE")["Persons"].sum().rename("TotalPersons")
 
-# Add mode share values to GeoJSON properties
+# Selected modes by SA2 (numerator)
+selected_df = df[df["Mode"].isin(selected_modes)]
+selected_by_sa2 = selected_df.groupby("SA2_16_CODE")["Persons"].sum().rename("SelectedPersons")
+
+# Combine and compute share
+mode_share_df = pd.concat([total_by_sa2, selected_by_sa2], axis=1).fillna(0)
+mode_share_df["PercentShare"] = (mode_share_df["SelectedPersons"] / mode_share_df["TotalPersons"]) * 100
+
+# Build lookup
+share_lookup = mode_share_df["PercentShare"].to_dict()
+
+# Add to GeoJSON
 for feature in geojson_data["features"]:
     sa2_code = feature["properties"]["SA2_MAIN16"]
-    persons = mode_map.get(sa2_code)
-    feature["properties"]["TotalPersons"] = persons if pd.notna(persons) else None
+    percent = share_lookup.get(sa2_code)
+    feature["properties"]["PercentShare"] = round(percent, 2) if pd.notna(percent) else None
 
-# === Get bounds for choropleth range ===
-valid_vals = mode_summary["TotalPersons"].dropna()
+# === Define map scale ===
+valid_vals = mode_share_df["PercentShare"].dropna()
 vmin, vmax = valid_vals.min(), valid_vals.max()
 
-# === Sydney initial view (slightly west) ===
-SYDNEY_COORDS = [-33.87, 151.05]  # moved west from 151.21
+colormap = LinearColormap(colors=["#e0f3db", "#a8ddb5", "#43a2ca", "#0868ac"], vmin=0, vmax=100)
+colormap.caption = "% Share of Selected Modes"
 
-# === Use session state to preserve zoom/pan ===
+# === Sydney-centered map (shifted west slightly) ===
+SYDNEY_COORDS = [-33.87, 151.05]
+
 if "map_center" not in st.session_state:
     st.session_state["map_center"] = SYDNEY_COORDS
 if "map_zoom" not in st.session_state:
     st.session_state["map_zoom"] = 10
 
-# === Color scale ===
-colormap = LinearColormap(colors=["green", "yellow", "red"], vmin=vmin, vmax=vmax)
-colormap.caption = "Total Persons by Selected Mode(s)"
-
-# === Build Folium map ===
+# === Map and styling ===
 m = folium.Map(location=st.session_state["map_center"], zoom_start=st.session_state["map_zoom"], control_scale=True)
 colormap.add_to(m)
 
 def style_function(feature):
-    value = feature["properties"]["TotalPersons"]
+    value = feature["properties"].get("PercentShare")
     if value is None:
         return {"fillOpacity": 0}
     return {
@@ -71,8 +77,8 @@ def style_function(feature):
     }
 
 tooltip = folium.GeoJsonTooltip(
-    fields=["SA2_NAME16", "SA2_MAIN16", "TotalPersons"],
-    aliases=["SA2 Name:", "SA2 Code:", "Total Persons (Selected Modes):"],
+    fields=["SA2_NAME16", "SA2_MAIN16", "PercentShare"],
+    aliases=["SA2 Name:", "SA2 Code:", "Selected Mode Share (%)"],
     localize=True,
     sticky=False,
     labels=True,
@@ -85,7 +91,7 @@ folium.GeoJson(
     name="Mode Share Choropleth"
 ).add_to(m)
 
-# === Display and preserve map state ===
+# === Show map and preserve state ===
 map_data = st_folium(m, width=900, height=650)
 
 if map_data and "center" in map_data and "zoom" in map_data:
