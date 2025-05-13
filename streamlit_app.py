@@ -1,19 +1,36 @@
-# streamlit_app.py
-
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import json
 
-st.title("🗺️ Fast GeoJSON Map Viewer")
+st.title("🗺️ Upload and View GeoJSON Map")
 
-# Load GeoJSON
-with open("data/your_file.geojson") as f:
-    geojson_data = json.load(f)
+uploaded_file = st.file_uploader("Upload a GeoJSON file", type="geojson")
 
-# Create Map
-m = folium.Map(location=[-33.87, 151.21], zoom_start=10)
-folium.GeoJson(geojson_data).add_to(m)
+if uploaded_file is not None:
+    try:
+        geojson_data = json.load(uploaded_file)
 
-# Display Map
-st_folium(m, width=700, height=500)
+        # Estimate center from first feature
+        coords = geojson_data['features'][0]['geometry']['coordinates']
+        geom_type = geojson_data['features'][0]['geometry']['type']
+
+        # Handle different geometry types
+        if geom_type == "Polygon":
+            lon, lat = coords[0][0]
+        elif geom_type == "MultiPolygon":
+            lon, lat = coords[0][0][0]
+        elif geom_type == "Point":
+            lon, lat = coords
+        else:
+            lon, lat = 151.21, -33.87  # fallback: Sydney CBD
+
+        m = folium.Map(location=[lat, lon], zoom_start=10)
+        folium.GeoJson(geojson_data, name="Uploaded GeoJSON").add_to(m)
+
+        st_folium(m, width=700, height=500)
+
+    except Exception as e:
+        st.error(f"⚠️ Failed to load GeoJSON: {e}")
+else:
+    st.info("Please upload a `.geojson` file.")
