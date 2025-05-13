@@ -1,23 +1,35 @@
 # streamlit_app.py
 
 import streamlit as st
-import pandas as pd
-import numpy as np
+import geopandas as gpd
+import folium
+from streamlit_folium import st_folium
 
-st.title("Random Points on a Map - Sydney Example")
+st.title("🗺️ Shapefile Viewer")
 
-# Generate some random latitude and longitude data around Sydney
-# Sydney's approximate coordinates: -33.8688, 151.2093
-num_points = st.slider("Number of points", 1, 100, 10)
+# Upload shapefile components
+uploaded_files = st.file_uploader("Upload shapefile components (.shp, .shx, .dbf, etc)", accept_multiple_files=True, type=['shp', 'shx', 'dbf', 'prj'])
 
-lat = -33.8688 + np.random.randn(num_points) * 0.01
-lon = 151.2093 + np.random.randn(num_points) * 0.01
+if uploaded_files:
+    # Save uploaded files to disk for GeoPandas to read
+    import os
+    import tempfile
 
-data = pd.DataFrame({
-    'lat': lat,
-    'lon': lon
-})
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for uploaded_file in uploaded_files:
+            with open(os.path.join(tmpdir, uploaded_file.name), "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-st.map(data)
+        # Find .shp file
+        shp_path = [os.path.join(tmpdir, f.name) for f in uploaded_files if f.name.endswith('.shp')][0]
+        
+        # Load with geopandas
+        gdf = gpd.read_file(shp_path)
+        st.write("Shapefile loaded successfully!")
+        st.dataframe(gdf.head())
 
-st.write("These are randomly generated points near Sydney.")
+        # Plot with Folium
+        m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=10)
+        folium.GeoJson(gdf).add_to(m)
+
+        st_folium(m, width=700, height=500)
