@@ -1,35 +1,25 @@
-# streamlit_app.py
-
 import streamlit as st
-import geopandas as gpd
-import folium
-from streamlit_folium import st_folium
+import pydeck as pdk
+import json
 
-st.title("🗺️ Shapefile Viewer")
+st.title("🗺️ Pydeck GeoJSON Viewer")
 
-# Upload shapefile components
-uploaded_files = st.file_uploader("Upload shapefile components (.shp, .shx, .dbf, etc)", accept_multiple_files=True, type=['shp', 'shx', 'dbf', 'prj'])
+# Load GeoJSON
+with open("data/your_file.geojson") as f:
+    geojson_data = json.load(f)
 
-if uploaded_files:
-    # Save uploaded files to disk for GeoPandas to read
-    import os
-    import tempfile
+layer = pdk.Layer(
+    "GeoJsonLayer",
+    geojson_data,
+    stroked=True,
+    filled=True,
+    line_width_min_pixels=1,
+    get_fill_color=[180, 0, 200, 40],
+    get_line_color=[255, 0, 0],
+)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for uploaded_file in uploaded_files:
-            with open(os.path.join(tmpdir, uploaded_file.name), "wb") as f:
-                f.write(uploaded_file.getbuffer())
+view_state = pdk.ViewState(latitude=-33.87, longitude=151.21, zoom=10)
 
-        # Find .shp file
-        shp_path = [os.path.join(tmpdir, f.name) for f in uploaded_files if f.name.endswith('.shp')][0]
-        
-        # Load with geopandas
-        gdf = gpd.read_file(shp_path)
-        st.write("Shapefile loaded successfully!")
-        st.dataframe(gdf.head())
+r = pdk.Deck(layers=[layer], initial_view_state=view_state)
 
-        # Plot with Folium
-        m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=10)
-        folium.GeoJson(gdf).add_to(m)
-
-        st_folium(m, width=700, height=500)
+st.pydeck_chart(r)
