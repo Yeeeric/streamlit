@@ -97,3 +97,26 @@ map_data = st_folium(m, width=900, height=650)
 if map_data and "center" in map_data and "zoom" in map_data:
     st.session_state["map_center"] = [map_data["center"]["lat"], map_data["center"]["lng"]]
     st.session_state["map_zoom"] = map_data["zoom"]
+
+# === Show detailed mode breakdown for clicked SA2 ===
+clicked_sa2 = None
+
+if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
+    clicked_props = map_data["last_active_drawing"]["properties"]
+    clicked_sa2 = clicked_props.get("SA2_MAIN16")
+    clicked_name = clicked_props.get("SA2_NAME16")
+
+if clicked_sa2:
+    st.subheader(f"🚏 Mode Share Breakdown for {clicked_name} (SA2 {clicked_sa2})")
+
+    # Filter data for clicked SA2
+    sa2_df = df[df["SA2_16_CODE"] == clicked_sa2].copy()
+
+    if not sa2_df.empty:
+        total_persons = sa2_df["Persons"].sum()
+        sa2_df["Share (%)"] = (sa2_df["Persons"] / total_persons * 100).round(2)
+        sa2_df = sa2_df[["Mode", "Persons", "Share (%)"]].sort_values("Persons", ascending=False)
+        st.dataframe(sa2_df, use_container_width=True)
+    else:
+        st.info("No data available for this SA2.")
+
