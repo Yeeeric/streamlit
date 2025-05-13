@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 st.title("🗺️ CO₂ Emissions by SA2")
 
 # Load data
-csv_path = "data/SA_CO2_totals.csv"
+csv_path = "data/SA2_CO2_totals.csv"
 geojson_path = "data/sa2.geojson"
 
 try:
