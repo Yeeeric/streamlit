@@ -1,10 +1,23 @@
+# streamlit_app.py
+
 import streamlit as st
+import pandas as pd
+import numpy as np
 
-st.title("🚀 Hello Streamlit!")
-st.write("Welcome to your first Streamlit app.")
-st.write("This app is running from a Python script.")
-st.write("Try editing the code and see changes when you rerun it!")
+st.title("Random Points on a Map - Sydney Example")
 
-name = st.text_input("What's your name?")
-if name:
-	st.success(f"Nice to meet you, {name}!")
+# Generate some random latitude and longitude data around Sydney
+# Sydney's approximate coordinates: -33.8688, 151.2093
+num_points = st.slider("Number of points", 1, 100, 10)
+
+lat = -33.8688 + np.random.randn(num_points) * 0.01
+lon = 151.2093 + np.random.randn(num_points) * 0.01
+
+data = pd.DataFrame({
+    'lat': lat,
+    'lon': lon
+})
+
+st.map(data)
+
+st.write("These are randomly generated points near Sydney.")
