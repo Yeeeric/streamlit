@@ -1,36 +1,41 @@
 import streamlit as st
+import pandas as pd
+import json
 import folium
 from streamlit_folium import st_folium
-import json
 
-st.title("🗺️ Upload and View GeoJSON Map")
+st.title("🗺️ CO₂ Emissions by SA2")
 
-uploaded_file = st.file_uploader("Upload a GeoJSON file", type="geojson")
+# Load data
+csv_path = "data/SA_CO2_totals.csv"
+geojson_path = "data/sa2.geojson"
 
-if uploaded_file is not None:
-    try:
-        geojson_data = json.load(uploaded_file)
+try:
+    df = pd.read_csv(csv_path, dtype={"SA2_16_CODE": str})
+    with open(geojson_path) as f:
+        geojson_data = json.load(f)
 
-        # Estimate center from first feature
-        coords = geojson_data['features'][0]['geometry']['coordinates']
-        geom_type = geojson_data['features'][0]['geometry']['type']
+    # Create base map
+    m = folium.Map(location=[-25.2744, 133.7751], zoom_start=4)  # center of Australia
 
-        # Handle different geometry types
-        if geom_type == "Polygon":
-            lon, lat = coords[0][0]
-        elif geom_type == "MultiPolygon":
-            lon, lat = coords[0][0][0]
-        elif geom_type == "Point":
-            lon, lat = coords
-        else:
-            lon, lat = 151.21, -33.87  # fallback: Sydney CBD
+    # Add Choropleth layer
+    choropleth = folium.Choropleth(
+        geo_data=geojson_data,
+        name="choropleth",
+        data=df,
+        columns=["SA2_16_CODE", "CO2_total"],
+        key_on="feature.properties.SA2_MAIN16",
+        fill_color="YlOrRd",
+        fill_opacity=0.7,
+        line_opacity=0.2,
+        legend_name="CO₂ Total",
+    ).add_to(m)
 
-        m = folium.Map(location=[lat, lon], zoom_start=10)
-        folium.GeoJson(geojson_data, name="Uploaded GeoJSON").add_to(m)
+    # Add hover tooltip
+    folium.GeoJsonTooltip(fields=["SA2_NAME16", "SA2_MAIN16"]).add_to(choropleth.geojson)
 
-        st_folium(m, width=700, height=500)
+    # Show map
+    st_folium(m, width=800, height=600)
 
-    except Exception as e:
-        st.error(f"⚠️ Failed to load GeoJSON: {e}")
-else:
-    st.info("Please upload a `.geojson` file.")
+except Exception as e:
+    st.error(f"❌ Failed to render map: {e}")
