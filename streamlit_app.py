@@ -9,7 +9,7 @@ st.set_page_config(layout="wide")
 st.title("🗺️ CO₂ Emissions by SA2 (Sydney)")
 
 # Load data
-csv_path = "data/SA_CO2_totals.csv"
+csv_path = "data/SA2_CO2_totals.csv"
 geojson_path = "data/sa2.geojson"
 
 df = pd.read_csv(csv_path, dtype={"SA2_16_CODE": str})
