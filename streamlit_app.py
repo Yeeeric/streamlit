@@ -10,7 +10,7 @@ st.title("🗺️ Mode Share by SA2 (Sydney)")
 
 # === Load data ===
 csv_path = "data/data_Mode_Census_UR_SA2.csv"
-geojson_path = "data/sa2_simplified.geojson"  # assumed simplified already
+geojson_path = "data/sa2.geojson"  # assumed simplified already
 
 df = pd.read_csv(csv_path, dtype={"SA2_16_CODE": str})
 with open(geojson_path) as f:
