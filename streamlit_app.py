@@ -1,119 +1,135 @@
 import streamlit as st
 import pandas as pd
-import json
+import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from branca.colormap import LinearColormap
 
-# Configure page layout
+# Set page config
 st.set_page_config(layout="wide")
-st.title("🚶‍♂️ Mode Share by SA2")
 
-# === Load data ===
-df = pd.read_csv("data/data_Mode_Census_UR_SA2.csv", dtype={"SA2_16_CODE": str})
-with open("data/sa2.geojson") as f:
-    geojson_data = json.load(f)
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
+    gdf = gpd.read_file("data/sa2.geojson")
+    return df, gdf
 
-# === Sidebar mode selection with select all/deselect all ===
-modes = sorted(df["Mode"].unique())
+df, gdf = load_data()
 
-# Set up session state
-if "selected_modes" not in st.session_state:
-    st.session_state.selected_modes = modes.copy()
-if "select_all" not in st.session_state:
-    st.session_state.select_all = True
-if "map_center" not in st.session_state:
-    st.session_state.map_center = [-33.87, 151.05]  # Slightly west of Sydney to avoid ocean
-if "map_zoom" not in st.session_state:
-    st.session_state.map_zoom = 10
-if "clicked_sa2" not in st.session_state:
-    st.session_state.clicked_sa2 = None
+# Get unique modes
+all_modes = df["Mode"].unique().tolist()
+all_modes.sort()
 
-# Sidebar filter
-st.sidebar.markdown("### Travel Modes")
-if st.sidebar.button("✅ Select All" if not st.session_state.select_all else "❌ Deselect All"):
-    st.session_state.select_all = not st.session_state.select_all
-    st.session_state.selected_modes = modes.copy() if st.session_state.select_all else []
+# Sidebar filters
+with st.sidebar:
+    st.header("Filter by Mode")
 
-new_selection = []
-for mode in modes:
-    if st.sidebar.checkbox(mode, value=mode in st.session_state.selected_modes, key=mode):
-        new_selection.append(mode)
+    if "selected_modes" not in st.session_state:
+        st.session_state.selected_modes = all_modes.copy()
 
-# Update selection state
-if new_selection != st.session_state.selected_modes:
-    st.session_state.selected_modes = new_selection
+    # Select/Deselect all buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Select All"):
+            st.session_state.selected_modes = all_modes.copy()
+    with col2:
+        if st.button("Deselect All"):
+            st.session_state.selected_modes = []
 
-# === Prepare aggregated data ===
+    # Mode checkbox list
+    selected = []
+    for mode in all_modes:
+        checked = mode in st.session_state.selected_modes
+        if st.checkbox(mode, checked=checked):
+            selected.append(mode)
+    st.session_state.selected_modes = selected
+
+# Skip rest of app if nothing selected
+if not st.session_state.selected_modes:
+    st.warning("Please select at least one mode to view the map.")
+    st.stop()
+
+# Calculate % share of selected modes per SA2
 selected_df = df[df["Mode"].isin(st.session_state.selected_modes)]
-grouped = selected_df.groupby("SA2_16_CODE")["Persons"].sum().rename("SelectedPersons")
-lookup = grouped.to_dict()
+sa2_total_selected = selected_df.groupby("SA2_16_CODE")["Persons"].sum().rename("Selected")
+sa2_total_all = df.groupby("SA2_16_CODE")["Persons"].sum().rename("AllModes")
+merged = pd.concat([sa2_total_selected, sa2_total_all], axis=1)
+merged["PercentShare"] = (merged["Selected"] / merged["AllModes"] * 100).round(2)
+lookup_percent = merged["PercentShare"].to_dict()
 
-# Inject data into GeoJSON
-for feature in geojson_data["features"]:
-    sa2_code = feature["properties"]["SA2_MAIN16"]
-    val = lookup.get(sa2_code)
-    feature["properties"]["PercentShare"] = round(val, 2) if pd.notna(val) else None
+# Add PercentShare property to GeoJSON
+gdf["PercentShare"] = gdf["SA2_MAIN16"].map(lookup_percent)
 
-# === Create folium map ===
-m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state.map_zoom, control_scale=True)
+# Create Folium map
+m = folium.Map(
+    location=[-33.86, 151.0],  # Slightly west of Sydney CBD
+    zoom_start=10,
+    control_scale=True,
+    prefer_canvas=True,
+)
 
-colormap = LinearColormap(["#e5f5e0", "#31a354"], vmin=0, vmax=max(lookup.values(), default=1))
-colormap.caption = "% Mode Share"
+# Define colormap
+max_percent = max(lookup_percent.values(), default=100)
+colormap = LinearColormap(
+    colors=["#e5f5e0", "#31a354"],
+    vmin=0,
+    vmax=max(100, max_percent),
+).to_step(10)
+colormap.caption = "Selected Mode Share (%)"
 colormap.add_to(m)
 
-def style_function(feature):
-    val = feature["properties"].get("PercentShare")
-    return {
-        "fillColor": colormap(val) if val is not None else "transparent",
-        "color": "black",
-        "weight": 0.3,
-        "fillOpacity": 0.7 if val is not None else 0,
-    }
+# Highlight selected zone
+highlight_function = lambda x: {"weight": 2, "fillOpacity": 0.7, "color": "black"}
 
+# Tooltip fields
 tooltip = folium.GeoJsonTooltip(
     fields=["SA2_NAME16", "SA2_MAIN16", "PercentShare"],
     aliases=["SA2 Name:", "SA2 Code:", "Selected Mode Share (%)"],
+    localize=True
 )
 
-geojson_layer = folium.GeoJson(
-    geojson_data,
-    style_function=style_function,
+# Inject GeoJSON into map
+geojson = folium.GeoJson(
+    gdf,
+    name="SA2 Areas",
+    style_function=lambda feature: {
+        "fillColor": colormap(feature["properties"]["PercentShare"])
+        if feature["properties"]["PercentShare"] is not None else "#cccccc",
+        "color": "grey",
+        "weight": 0.5,
+        "fillOpacity": 0.7 if feature["properties"]["PercentShare"] is not None else 0,
+    },
     tooltip=tooltip,
-    name="Mode Share Layer"
+    highlight_function=highlight_function
 )
-geojson_layer.add_to(m)
+geojson.add_to(m)
 
-# === Display map and handle clicks ===
-col1, col2 = st.columns([2, 1])
+# Row layout
+col_map, col_info = st.columns([3, 1])
 
-with col1:
-    map_data = st_folium(m, width=800, height=600)
+# Render map
+with col_map:
+    clicked = st_folium(m, width=900, height=600)
 
-    # Preserve zoom and center
-    if map_data and "center" in map_data and "zoom" in map_data:
-        st.session_state.map_center = [map_data["center"]["lat"], map_data["center"]["lng"]]
-        st.session_state.map_zoom = map_data["zoom"]
+# Info panel on the right
+with col_info:
+    st.markdown("### SA2 Mode Share Breakdown")
 
-    # Track clicked SA2
-    if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
-        props = map_data["last_active_drawing"]["properties"]
-        clicked_code = props.get("SA2_MAIN16")
-        clicked_name = props.get("SA2_NAME16")
-        st.session_state.clicked_sa2 = (clicked_code, clicked_name)
+    if clicked and "last_active_drawing" in clicked:
+        props = clicked["last_active_drawing"]["properties"]
+        sa2_code = props["SA2_MAIN16"]
+        sa2_name = props["SA2_NAME16"]
+        st.markdown(f"**{sa2_name}** (Code: {sa2_code})")
 
-# === Mode share table (right panel) ===
-with col2:
-    if st.session_state.clicked_sa2:
-        sa2_code, sa2_name = st.session_state.clicked_sa2
-        st.markdown(f"### 📊 Mode Share for {sa2_name}")
-
-        sa2_df = df[(df["SA2_16_CODE"] == sa2_code) & (df["Mode"].isin(st.session_state.selected_modes))].copy()
-        total = sa2_df["Persons"].sum()
-
-        if total > 0:
-            sa2_df["% Share"] = (sa2_df["Persons"] / total * 100).round(2)
-            sa2_df = sa2_df[["Mode", "Persons", "% Share"]].sort_values("Persons", ascending=False)
-            st.dataframe(sa2_df, use_container_width=True)
+        zone_df = df[df["SA2_16_CODE"] == sa2_code].copy()
+        zone_df = zone_df.groupby("Mode")["Persons"].sum().reset_index()
+        total_selected = zone_df[zone_df["Mode"].isin(st.session_state.selected_modes)]["Persons"].sum()
+        if total_selected > 0:
+            zone_df["% Share (selected total)"] = zone_df["Persons"] / total_selected * 100
         else:
-            st.info("No data for selected modes in this SA2.")
+            zone_df["% Share (selected total)"] = 0
+
+        st.dataframe(zone_df.rename(columns={"Persons": "Persons (raw)"}), use_container_width=True)
+    else:
+        st.info("Click a zone to see detailed mode share info.")
