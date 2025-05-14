@@ -27,7 +27,7 @@ filtered_data = mode_share[mode_share["Mode"].isin(selected_modes)]
 # Calculate the percentage based on selected modes
 if not filtered_data.empty:
     mode_share_table = filtered_data[['SA2_16', 'Persons', 'Ratio']]  # Correct column names
-    mode_share_table['Percentage'] = (mode_share_table['Persons'] / filtered_data['Persons'].sum()) * 100  # Percentage of selected modes
+    mode_share_table.loc[:, 'Percentage'] = (mode_share_table['Persons'] / filtered_data['Persons'].sum()) * 100  # Percentage of selected modes
 else:
     mode_share_table = pd.DataFrame(columns=['SA2_16', 'Persons', 'Percentage'])
 
@@ -86,7 +86,9 @@ if st_data and st_data.get("last_active_drawing", None):
     # Get data for clicked zone (filter by SA2 code)
     clicked_data = filtered_data[filtered_data['SA2_16'] == clicked_sa2_name]
     
+    # Calculate percentage for clicked data
     if not clicked_data.empty:
+        clicked_data.loc[:, 'Percentage'] = (clicked_data['Persons'] / clicked_data['Persons'].sum()) * 100  # Calculate Percentage for clicked zone
         st.write(f"Detailed Mode Share for {clicked_sa2_name} (Code: {clicked_sa2_code})")
         st.write(clicked_data[['SA2_16', 'Persons', 'Mode', 'Percentage']])  # Show relevant columns
     else:
