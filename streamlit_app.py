@@ -97,8 +97,7 @@ if selected_modes:
 
             if not clicked_data.empty:
                 clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
-                st.markdown(f"**Detailed Mode Share for {clicked_name}**  
-                             *(Code: {clicked_code})*")
+                st.markdown(f"**Detailed Mode Share for {clicked_name}**\n*(Code: {clicked_code})*")
                 st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
                              use_container_width=True)
             else:
