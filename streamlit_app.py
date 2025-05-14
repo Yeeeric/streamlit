@@ -9,6 +9,10 @@ from branca.colormap import LinearColormap
 mode_share = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
 geojson_data = json.load(open("data/sa2.geojson"))
 
+# Check the structure of the GeoJSON data (for debugging purposes)
+st.write("GeoJSON Properties Example:")
+st.write(geojson_data['features'][0]['properties'])  # Display the properties of the first feature
+
 # Sidebar mode selection
 modes = mode_share["Mode"].unique()  # Correct capitalization for "Mode"
 selected_mode = st.sidebar.selectbox("Select a mode of transport", sorted(modes))
@@ -28,7 +32,7 @@ colormap = LinearColormap(colors=['white', 'blue'], vmin=filtered_data['Persons'
 # Function to add style to GeoJSON features
 def style_function(feature):
     # Match the SA2 code with the geojson data
-    sa2_code = feature['properties']['SA2_16_CODE']  # Correct capitalization for "SA2_16_CODE"
+    sa2_code = feature['properties']['SA2_MAIN16']  # Updated to use 'SA2_MAIN16'
     person_count = filtered_data[filtered_data['SA2_16_CODE'] == sa2_code]['Persons'].values[0] if not filtered_data[filtered_data['SA2_16_CODE'] == sa2_code].empty else None
     if person_count is None:
         # If person_count is None (null), make the area transparent
@@ -51,7 +55,7 @@ def style_function(feature):
 geojson_layer = folium.GeoJson(
     geojson_data,
     style_function=style_function,
-    tooltip=folium.GeoJsonTooltip(fields=['SA2_16', 'SA2_16_CODE'], aliases=['Name:', 'Code:'])  # Correct capitalization for "SA2_16" and "SA2_16_CODE"
+    tooltip=folium.GeoJsonTooltip(fields=['SA2_16', 'SA2_MAIN16'], aliases=['Name:', 'Code:'])  # Updated to 'SA2_MAIN16'
 ).add_to(m)
 
 # Display map in Streamlit
@@ -72,19 +76,8 @@ st.sidebar.write(mode_share_table)
 # When a zone is clicked, display detailed mode share breakdown
 if st_data and st_data.get("last_active_drawing", None):
     clicked_feature = st_data["last_active_drawing"]
-    clicked_sa2_code = clicked_feature['properties']['SA2_16_CODE']  # Correct capitalization for "SA2_16_CODE"
-    
-    # Find the clicked SA2 in the filtered data
-    clicked_data = filtered_data[filtered_data['SA2_16_CODE'] == clicked_sa2_code]
-    
-    # Display the mode share breakdown for the clicked SA2
-    if not clicked_data.empty:
-        clicked_name = clicked_data['SA2_16'].values[0]  # Correct column name for "SA2_16"
-        clicked_persons = clicked_data['Persons'].values[0]  # Correct column name for "Persons"
-        clicked_ratio = clicked_data['Ratio'].values[0]  # Correct column name for "Ratio"
-        clicked_percentage = (clicked_persons / clicked_ratio) * 100
-        
-        st.sidebar.subheader(f"Mode Share Breakdown for {clicked_name}")
-        st.sidebar.write(f"Persons: {clicked_persons}")
-        st.sidebar.write(f"Total Ratio: {clicked_ratio}")
-        st.sidebar.write(f"Mode Share Percentage: {clicked_percentage:.2f}%")
+    clicked_sa2_code = clicked_feature['properties']['SA2_MAIN16']  # Updated to 'SA2_MAIN16'
+    clicked_sa2_name = clicked_feature['properties']['SA2_16']  # No change here, assuming it's still 'SA2_16'
+    clicked_data = filtered_data[filtered_data['SA2_16'] == clicked_sa2_name]
+    st.write(f"Detailed Mode Share for {clicked_sa2_name} (Code: {clicked_sa2_code})")
+    st.write(clicked_data)
