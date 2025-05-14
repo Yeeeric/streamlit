@@ -39,21 +39,40 @@ if selected_modes:
     mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
     percentage_by_sa2 = mode_data.set_index("SA2_16_CODE")["Percentage"].to_dict()
 
+    # Filter out invalid values
+    percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
+
+    if percentages:
+        min_val = min(percentages)
+        max_val = max(percentages)
+        if min_val == max_val:
+            max_val += 1  # Avoid zero range
+    else:
+        min_val, max_val = 0, 1
+
     # Setup map
     m = folium.Map(location=[-33.86, 151.21], zoom_start=10, tiles="cartodbpositron")
-    colormap = linear.Blues_09.scale(0, max(percentage_by_sa2.values(), default=1))
+    colormap = linear.Blues_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
 
     def style_function(feature):
         sa2_code = feature["properties"]["SA2_MAIN16"]
         pct = percentage_by_sa2.get(sa2_code, 0)
-        return {
-            "fillColor": colormap(pct),
-            "color": "black",
-            "weight": 0.3,
-            "fillOpacity": 0.7,
-        }
+        try:
+            return {
+                "fillColor": colormap(pct),
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.7,
+            }
+        except ValueError:
+            return {
+                "fillColor": "#cccccc",
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.3,
+            }
 
     tooltip = folium.GeoJsonTooltip(fields=["SA2_MAIN16", "SA2_NAME16"])
 
