@@ -1,16 +1,18 @@
 import streamlit as st
 import pandas as pd
-import geopandas as gpd
+import json
 import folium
 from folium import Choropleth
 from streamlit_folium import st_folium
 from branca.colormap import linear
 
-# Load data using correct paths
+# Load data
 geojson_path = "data/sa2.geojson"
 csv_path = "data/data_Mode_Census_UR_SA2.csv"
 
-geojson_data = gpd.read_file(geojson_path)
+with open(geojson_path, "r", encoding="utf-8") as f:
+    geojson_data = json.load(f)
+
 df = pd.read_csv(csv_path)
 
 # Sidebar filters
@@ -36,9 +38,6 @@ if selected_modes:
     # Get percentage for selected visual mode
     mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
     percentage_by_sa2 = mode_data.set_index("SA2_16_CODE")["Percentage"].to_dict()
-
-    # Merge values into GeoDataFrame
-    geojson_data["value"] = geojson_data["SA2_MAIN16"].map(percentage_by_sa2)
 
     # Setup map
     m = folium.Map(location=[-33.86, 151.21], zoom_start=10, tiles="cartodbpositron")
