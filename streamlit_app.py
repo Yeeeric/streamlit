@@ -42,15 +42,20 @@ if st.sidebar.checkbox("Select All Modes", value=st.session_state.select_all, ke
 else:
     st.session_state.select_all = False
 
-# Multiselect using session state
-selected_modes = st.sidebar.multiselect(
-    "Choose modes",
-    options=all_modes,
-    default=st.session_state.selected_modes,
-    key="mode_multiselect"
-)
+# Manual checkbox selection for each mode
+selected_modes = []
 
-# Update stored selected modes
+st.sidebar.write("Choose modes:")
+for mode in all_modes:
+    if mode not in st.session_state:
+        st.session_state[mode] = mode in st.session_state.selected_modes
+
+    checked = st.sidebar.checkbox(mode, value=st.session_state[mode], key=f"chk_{mode}")
+    if checked:
+        selected_modes.append(mode)
+    st.session_state[mode] = checked
+
+# Update session state
 st.session_state.selected_modes = selected_modes
 
 # ---- Main processing and map generation ----
