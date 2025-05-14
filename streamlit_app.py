@@ -8,7 +8,7 @@ from branca.colormap import linear
 
 # Load data
 geojson_path = "data/2016_SA2.geojson"
-csv_path = "data/2016_SA2UR.csv"
+csv_path = "data/2016_SA2UR_Mode.csv"
 
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
