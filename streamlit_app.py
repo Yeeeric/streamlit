@@ -6,25 +6,6 @@ from folium import Choropleth
 from streamlit_folium import st_folium
 from branca.colormap import linear
 
-# Set wide layout
-st.set_page_config(layout="wide")
-
-# Inject custom CSS to reduce space between columns
-st.markdown("""
-    <style>
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-        }
-        .element-container:has(.stDataFrame) {
-            padding-top: 0 !important;
-        }
-        div[data-testid="column"] {
-            gap: 0rem !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # Load data
 geojson_path = "data/2016_SA2.geojson"
 csv_path = "data/2016_SA2UR_Mode.csv"
@@ -102,29 +83,22 @@ if selected_modes:
         tooltip=tooltip
     ).add_to(m)
 
-    # Layout container
-    with st.container():
-        col1, col2 = st.columns([3, 1], gap="small")
+    # Show map
+    st_data = st_folium(m, width=700, height=600)
 
-        with col1:
-            st_data = st_folium(m, width=700, height=600)
+    # Show breakdown if a zone is clicked
+    if st_data and st_data.get("last_active_drawing"):
+        props = st_data["last_active_drawing"]["properties"]
+        clicked_code = props["SA2_MAIN16"]
+        clicked_name = props["SA2_NAME16"]
+        clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
 
-        with col2:
-            if st_data and st_data.get("last_active_drawing"):
-                props = st_data["last_active_drawing"]["properties"]
-                clicked_code = props["SA2_MAIN16"]
-                clicked_name = props["SA2_NAME16"]
-                clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
-
-                if not clicked_data.empty:
-                    clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
-                    st.markdown(f"""
-                        **Detailed Mode Share for {clicked_name}**  
-                        *(Code: {clicked_code})*
-                    """)
-                    st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
-                                 use_container_width=True)
-                else:
-                    st.info("No data available for the selected zone.")
+        if not clicked_data.empty:
+            clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
+            st.markdown(f"**Detailed Mode Share for {clicked_name}**\n*(Code: {clicked_code})*")
+            st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
+                         use_container_width=True)
+        else:
+            st.info("No data available for the selected zone.")
 else:
     st.warning("Please select at least one mode.")
