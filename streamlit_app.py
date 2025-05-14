@@ -27,9 +27,9 @@ if selected_modes:
     filtered_data = df[df["Mode"].isin(selected_modes)].copy()
 
     # Calculate total persons per SA2
-    total_persons = filtered_data.groupby("SA2_16_CODE")["Persons"].sum().reset_index()
-    total_persons.columns = ["SA2_16_CODE", "TotalPersons"]
-    filtered_data = filtered_data.merge(total_persons, on="SA2_16_CODE", how="left")
+    total_persons = filtered_data.groupby("SA2_CODE")["Persons"].sum().reset_index()
+    total_persons.columns = ["SA2_CODE", "TotalPersons"]
+    filtered_data = filtered_data.merge(total_persons, on="SA2_CODE", how="left")
     filtered_data["Percentage"] = (filtered_data["Persons"] / filtered_data["TotalPersons"]) * 100
 
     # Mode for visualization
@@ -37,7 +37,7 @@ if selected_modes:
 
     # Get percentage for selected visual mode
     mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
-    percentage_by_sa2 = mode_data.set_index("SA2_16_CODE")["Percentage"].to_dict()
+    percentage_by_sa2 = mode_data.set_index("SA2_CODE")["Percentage"].to_dict()
 
     # Filter out invalid values
     percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
@@ -90,12 +90,12 @@ if selected_modes:
         props = st_data["last_active_drawing"]["properties"]
         clicked_code = props["SA2_MAIN16"]
         clicked_name = props["SA2_NAME16"]
-        clicked_data = filtered_data[filtered_data["SA2_16_CODE"] == clicked_code]
+        clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
 
         if not clicked_data.empty:
             clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
             st.write(f"Detailed Mode Share for {clicked_name} (Code: {clicked_code})")
-            st.dataframe(clicked_data[["SA2_16", "Mode", "Persons", "Percentage"]].round(2))
+            st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2))
         else:
             st.write("No data available for the selected zone.")
 else:
