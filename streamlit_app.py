@@ -1,91 +1,90 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import json
 import folium
+import json
 from streamlit_folium import st_folium
 from branca.colormap import LinearColormap
-from folium.features import GeoJsonTooltip
 
-# Load data
+# Load the data files
 mode_share = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
-with open("data/sa2.geojson") as f:
-    geojson_data = json.load(f)
+geojson_data = json.load(open("data/sa2.geojson"))
 
 # Sidebar mode selection
-modes = mode_share["mode"].unique()
+modes = mode_share["Mode"].unique()  # Correct capitalization for "Mode"
 selected_mode = st.sidebar.selectbox("Select a mode of transport", sorted(modes))
 
 # Filter data by selected mode
-df_mode = mode_share[mode_share["mode"] == selected_mode].copy()
+filtered_data = mode_share[mode_share["Mode"] == selected_mode]
 
-# Calculate mode share percentage
-df_mode["mode_share_pct"] = df_mode["persons"] / df_mode["total_persons"] * 100
+# Generate a folium map centered around a specific point (example: Sydney)
+m = folium.Map(location=[-33.8688, 151.2093], zoom_start=12)
 
-# Merge with GeoJSON
-geojson_map = {}
-for feature in geojson_data["features"]:
-    sa2_code = str(feature["properties"]["sa2_16_code"])
-    geojson_map[sa2_code] = feature
-    feature["properties"]["mode_share_pct"] = None
-    feature["properties"]["persons"] = None
-    feature["properties"]["total_persons"] = None
-    feature["properties"]["mode"] = None
+# Add GeoJSON layer to the map
+geojson_layer = folium.GeoJson(geojson_data).add_to(m)
 
-for _, row in df_mode.iterrows():
-    sa2_code = str(row["sa2_16_code"])
-    if sa2_code in geojson_map:
-        geojson_map[sa2_code]["properties"]["mode_share_pct"] = round(row["mode_share_pct"], 2)
-        geojson_map[sa2_code]["properties"]["persons"] = int(row["persons"])
-        geojson_map[sa2_code]["properties"]["total_persons"] = int(row["total_persons"])
-        geojson_map[sa2_code]["properties"]["mode"] = row["mode"]
+# Create a color scale from white to blue, with null values set to transparent
+colormap = LinearColormap(colors=['white', 'blue'], vmin=filtered_data['Persons'].min(), vmax=filtered_data['Persons'].max())
 
-# Define color scale
-mode_values = df_mode["mode_share_pct"].dropna()
-min_val, max_val = mode_values.min(), mode_values.max()
-colormap = LinearColormap(colors=["#ffffcc", "#41b6c4", "#253494"], vmin=min_val, vmax=max_val)
-colormap.caption = f"{selected_mode} mode share (%)"
-
-# Create map
-m = folium.Map(location=[-25.2744, 133.7751], zoom_start=4, tiles="cartodbpositron")
-
+# Function to add style to GeoJSON features
 def style_function(feature):
-    pct = feature["properties"]["mode_share_pct"]
-    return {
-        "fillOpacity": 0.7,
-        "weight": 0.3,
-        "color": "black",
-        "fillColor": colormap(pct) if pct is not None else "#d3d3d3",
-    }
+    # Match the SA2 code with the geojson data
+    sa2_code = feature['properties']['SA2_16_CODE']  # Correct capitalization for "SA2_16_CODE"
+    person_count = filtered_data[filtered_data['SA2_16_CODE'] == sa2_code]['Persons'].values[0] if not filtered_data[filtered_data['SA2_16_CODE'] == sa2_code].empty else None
+    if person_count is None:
+        # If person_count is None (null), make the area transparent
+        return {
+            'fillColor': 'transparent',
+            'color': 'black',
+            'weight': 1,
+            'fillOpacity': 0.0
+        }
+    else:
+        # Otherwise, use the color scale from white to blue
+        return {
+            'fillColor': colormap(person_count),
+            'color': 'black',
+            'weight': 1,
+            'fillOpacity': 0.7
+        }
 
-tooltip = GeoJsonTooltip(
-    fields=["sa2_16", "mode", "mode_share_pct", "persons", "total_persons"],
-    aliases=["SA2", "Mode", "Mode share (%)", "Persons", "Total persons"],
-    localize=True,
-    sticky=False,
-    labels=True,
-)
-
+# Apply style to GeoJSON features
 geojson_layer = folium.GeoJson(
     geojson_data,
     style_function=style_function,
-    tooltip=tooltip,
-    name="Mode Share",
-)
-
-geojson_layer.add_to(m)
-colormap.add_to(m)
+    tooltip=folium.GeoJsonTooltip(fields=['SA2_16', 'SA2_16_CODE'], aliases=['Name:', 'Code:'])  # Correct capitalization for "SA2_16" and "SA2_16_CODE"
+).add_to(m)
 
 # Display map in Streamlit
 st_data = st_folium(m, width=1000, height=600)
 
-# Clickable feature display
+# Mode share table on the right side
+st.sidebar.title(f"Mode Share for {selected_mode}")
+st.sidebar.write("Mode Share Breakdown:")
+
+# Create a table for the mode share data
+mode_share_table = filtered_data[['SA2_16', 'Persons', 'Ratio']]  # Correct column names
+mode_share_table['Percentage'] = (mode_share_table['Persons'] / mode_share_table['Ratio']) * 100  # Calculation for percentage
+mode_share_table = mode_share_table[['SA2_16', 'Persons', 'Percentage']]
+
+# Show the table on the sidebar
+st.sidebar.write(mode_share_table)
+
+# When a zone is clicked, display detailed mode share breakdown
 if st_data and st_data.get("last_active_drawing", None):
-    props = st_data["last_active_drawing"]["properties"]
-    st.subheader(f"{props['sa2_16']}")
-    st.markdown(f"""
-    - **Mode**: {props['mode']}
-    - **Mode Share**: {props['mode_share_pct']}%
-    - **Persons**: {props['persons']}
-    - **Total Persons**: {props['total_persons']}
-    """)
+    clicked_feature = st_data["last_active_drawing"]
+    clicked_sa2_code = clicked_feature['properties']['SA2_16_CODE']  # Correct capitalization for "SA2_16_CODE"
+    
+    # Find the clicked SA2 in the filtered data
+    clicked_data = filtered_data[filtered_data['SA2_16_CODE'] == clicked_sa2_code]
+    
+    # Display the mode share breakdown for the clicked SA2
+    if not clicked_data.empty:
+        clicked_name = clicked_data['SA2_16'].values[0]  # Correct column name for "SA2_16"
+        clicked_persons = clicked_data['Persons'].values[0]  # Correct column name for "Persons"
+        clicked_ratio = clicked_data['Ratio'].values[0]  # Correct column name for "Ratio"
+        clicked_percentage = (clicked_persons / clicked_ratio) * 100
+        
+        st.sidebar.subheader(f"Mode Share Breakdown for {clicked_name}")
+        st.sidebar.write(f"Persons: {clicked_persons}")
+        st.sidebar.write(f"Total Ratio: {clicked_ratio}")
+        st.sidebar.write(f"Mode Share Percentage: {clicked_percentage:.2f}%")
