@@ -27,7 +27,7 @@ with open(geojson_path, "r", encoding="utf-8") as f:
 df = pd.read_csv(csv_path, dtype={"SA2_CODE": str})
 
 # ---- Determine correct GeoJSON keys ----
-code_key = "SA2_MAIN16" if year == "2016" else "SA2_MAIN21"
+code_key = "SA2_MAIN16" if year == "2016" else "SA2_CODE21"
 name_key = "SA2_NAME16" if year == "2016" else "SA2_NAME21"
 
 # ---- Sidebar: Mode selector ----
