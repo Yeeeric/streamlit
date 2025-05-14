@@ -1,79 +1,120 @@
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
-from folium import Choropleth, GeoJsonTooltip
 import json
+import folium
+from folium import Choropleth
+from streamlit_folium import st_folium
 from branca.colormap import linear
 
-# File paths
+# Load data
 geojson_path = "data/sa2.geojson"
 csv_path = "data/data_Mode_Census_UR_SA2.csv"
 
-# Load data
 with open(geojson_path, "r", encoding="utf-8") as f:
-    sa2_geojson = json.load(f)
+    geojson_data = json.load(f)
 
 df = pd.read_csv(csv_path)
 
-# Sidebar mode selection
-mode_columns = [col for col in df.columns if col not in ['SA2_16_CODE', 'SA2_16']]
-selected_mode = st.sidebar.selectbox("Select a travel mode", mode_columns)
+# Sidebar filters
+st.sidebar.header("Mode Selector")
 
-# Map SA2 code to percentage for selected mode
-percentage_by_sa2 = dict(zip(df["SA2_16_CODE"], df[selected_mode]))
+all_modes = sorted(df["Mode"].unique())
+select_all = st.sidebar.checkbox("Select All Modes", value=False)
+selected_modes = st.sidebar.multiselect("Choose modes", all_modes, default=all_modes if select_all else [])
 
-# Add percentage as a new property to each GeoJSON feature
-for feature in sa2_geojson["features"]:
-    sa2_code = feature["properties"]["SA2_MAIN16"]
-    pct = percentage_by_sa2.get(sa2_code, 0)
-    feature["properties"]["PERCENTAGE"] = f"{pct:.1f}%"
-    feature["properties"]["PERCENTAGE_FLOAT"] = pct  # For color scale
+# Filter and process data
+if selected_modes:
+    filtered_data = df[df["Mode"].isin(selected_modes)].copy()
 
-# Set up color scale
-pct_values = list(percentage_by_sa2.values())
-colormap = linear.Blues_09.scale(min(pct_values), max(pct_values))
-colormap.caption = f"{selected_mode} mode share (%)"
+    # Calculate total persons per SA2
+    total_persons = filtered_data.groupby("SA2_16_CODE")["Persons"].sum().reset_index()
+    total_persons.columns = ["SA2_16_CODE", "TotalPersons"]
+    filtered_data = filtered_data.merge(total_persons, on="SA2_16_CODE", how="left")
+    filtered_data["Percentage"] = (filtered_data["Persons"] / filtered_data["TotalPersons"]) * 100
 
-# Define style for each feature
-def style_function(feature):
-    pct = feature["properties"]["PERCENTAGE_FLOAT"]
-    return {
-        "fillColor": colormap(pct),
-        "color": "black",
-        "weight": 0.3,
-        "fillOpacity": 0.7,
-    }
+    # Mode for visualization
+    mode_for_visual = st.sidebar.selectbox("Mode to Visualize", selected_modes)
 
-# Initialize Folium map
-m = folium.Map(location=[-25.2744, 133.7751], zoom_start=4, tiles="cartodbpositron")
+    # Get percentage for selected visual mode
+    mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
+    percentage_by_sa2 = mode_data.set_index("SA2_16_CODE")["Percentage"].to_dict()
 
-# Add choropleth layer
-folium.GeoJson(
-    sa2_geojson,
-    style_function=style_function,
-    tooltip=GeoJsonTooltip(
-        fields=["SA2_NAME16", "PERCENTAGE"],
-        aliases=["SA2: ", f"{selected_mode}:"],
-        labels=True,
-        sticky=False
+    # Filter out invalid values
+    percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
+
+    if percentages:
+        min_val = min(percentages)
+        max_val = max(percentages)
+        if min_val == max_val:
+            max_val += 1  # Avoid zero range
+    else:
+        min_val, max_val = 0, 1
+
+    # Setup map
+    m = folium.Map(location=[-33.86, 151.21], zoom_start=10, tiles="cartodbpositron")
+    colormap = linear.Blues_09.scale(min_val, max_val)
+    colormap.caption = f"Percentage of {mode_for_visual}"
+    colormap.add_to(m)
+
+    def style_function(feature):
+        sa2_code = feature["properties"]["SA2_MAIN16"]
+        pct = percentage_by_sa2.get(sa2_code, 0)
+        try:
+            return {
+                "fillColor": colormap(pct),
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.7,
+            }
+        except ValueError:
+            return {
+                "fillColor": "#cccccc",
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.3,
+            }
+
+    # Create tooltips with the percentage of the selected mode
+    tooltip = folium.GeoJsonTooltip(
+        fields=["SA2_MAIN16", "SA2_NAME16"],
+        aliases=["SA2 Code: ", "SA2 Name: "],
+        localize=True,
+        sticky=True,
+        labels=True
     )
-).add_to(m)
+    tooltip.add_to(folium.GeoJson(
+        geojson_data,
+        name="SA2",
+        style_function=style_function
+    ))
 
-# Add color legend
-colormap.add_to(m)
+    # Add GeoJson data with tooltips
+    folium.GeoJson(
+        geojson_data,
+        name="SA2",
+        style_function=style_function,
+        tooltip=folium.GeoJsonTooltip(
+            fields=["SA2_MAIN16", "SA2_NAME16"],
+            aliases=["SA2 Code: ", "SA2 Name: "],
+            labels=True,
+            sticky=True
+        )
+    ).add_to(m)
 
-# Render map
-st_data = st_folium(m, width=700, height=600)
+    st_data = st_folium(m, width=700, height=600)
 
-# Show breakdown if a zone is clicked
-if st_data and st_data.get("last_active_drawing"):
-    clicked_code = st_data["last_active_drawing"]["properties"]["SA2_MAIN16"]
-    clicked_name = st_data["last_active_drawing"]["properties"]["SA2_NAME16"]
-    st.markdown(f"### Mode share in {clicked_name}")
-    breakdown = df[df["SA2_16_CODE"] == clicked_code].T
-    breakdown = breakdown.reset_index()
-    breakdown.columns = ["Mode", "Percentage"]
-    breakdown = breakdown[~breakdown["Mode"].isin(["SA2_16_CODE", "SA2_16"])]
-    breakdown["Percentage"] = breakdown["Percentage"].astype(float).map("{:.1f}%".format)
-    st.dataframe(breakdown, use_container_width=True)
+    # Show breakdown if a zone is clicked
+    if st_data and st_data.get("last_active_drawing"):
+        props = st_data["last_active_drawing"]["properties"]
+        clicked_code = props["SA2_MAIN16"]
+        clicked_name = props["SA2_NAME16"]
+        clicked_data = filtered_data[filtered_data["SA2_16_CODE"] == clicked_code]
+
+        if not clicked_data.empty:
+            clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
+            st.write(f"Detailed Mode Share for {clicked_name} (Code: {clicked_code})")
+            st.dataframe(clicked_data[["SA2_16", "Mode", "Persons", "Percentage"]].round(2))
+        else:
+            st.write("No data available for the selected zone.")
+else:
+    st.warning("Please select at least one mode.")
