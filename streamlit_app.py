@@ -50,8 +50,8 @@ if selected_modes:
     else:
         min_val, max_val = 0, 1
 
-    # Setup map with updated zoom and location
-    m = folium.Map(location=[-33.86, 151.10], zoom_start=11, tiles="cartodbpositron")
+    # Setup map
+    m = folium.Map(location=[-33.86, 151.21], zoom_start=10, tiles="cartodbpositron")
     colormap = linear.Blues_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
@@ -74,26 +74,15 @@ if selected_modes:
                 "fillOpacity": 0.3,
             }
 
-    # Create tooltips with the percentage of the selected mode
-    def get_tooltip(feature):
-        sa2_code = feature["properties"]["SA2_MAIN16"]
-        percentage = percentage_by_sa2.get(sa2_code, 0)
-        return folium.Tooltip(f"SA2: {feature['properties']['SA2_NAME16']} | {mode_for_visual} share: {percentage:.2f}%")
+    tooltip = folium.GeoJsonTooltip(fields=["SA2_MAIN16", "SA2_NAME16"])
 
-    # Add GeoJson data with tooltips
-    geojson_layer = folium.GeoJson(
+    folium.GeoJson(
         geojson_data,
         name="SA2",
         style_function=style_function,
-        tooltip=folium.GeoJsonTooltip(
-            fields=["SA2_MAIN16", "SA2_NAME16"],
-            aliases=["SA2 Code: ", "SA2 Name: "],
-            labels=True,
-            sticky=True
-        )  # The tooltip is now correctly passed to GeoJson
+        tooltip=tooltip
     ).add_to(m)
 
-    # Pass the map to Streamlit for rendering
     st_data = st_folium(m, width=700, height=600)
 
     # Show breakdown if a zone is clicked
