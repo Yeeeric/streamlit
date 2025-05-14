@@ -55,7 +55,7 @@ def style_function(feature):
 geojson_layer = folium.GeoJson(
     geojson_data,
     style_function=style_function,
-    tooltip=folium.GeoJsonTooltip(fields=['SA2_16', 'SA2_MAIN16'], aliases=['Name:', 'Code:'])  # Updated to 'SA2_MAIN16'
+    tooltip=folium.GeoJsonTooltip(fields=['SA2_NAME16', 'SA2_MAIN16'], aliases=['Name:', 'Code:'])  # Updated to 'SA2_NAME16'
 ).add_to(m)
 
 # Display map in Streamlit
@@ -77,7 +77,7 @@ st.sidebar.write(mode_share_table)
 if st_data and st_data.get("last_active_drawing", None):
     clicked_feature = st_data["last_active_drawing"]
     clicked_sa2_code = clicked_feature['properties']['SA2_MAIN16']  # Updated to 'SA2_MAIN16'
-    clicked_sa2_name = clicked_feature['properties']['SA2_16']  # No change here, assuming it's still 'SA2_16'
+    clicked_sa2_name = clicked_feature['properties']['SA2_NAME16']  # Updated to 'SA2_NAME16'
     clicked_data = filtered_data[filtered_data['SA2_16'] == clicked_sa2_name]
     st.write(f"Detailed Mode Share for {clicked_sa2_name} (Code: {clicked_sa2_code})")
     st.write(clicked_data)
