@@ -1,135 +1,121 @@
 import streamlit as st
 import pandas as pd
-import geopandas as gpd
+import json
 import folium
 from streamlit_folium import st_folium
 from branca.colormap import LinearColormap
 
-# Set page config
-st.set_page_config(layout="wide")
+# Load spatial and tabular data
+with open("data/sa2.geojson") as f:
+    geojson_data = json.load(f)
 
-# Load data
-@st.cache_data
-def load_data():
-    df = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
-    gdf = gpd.read_file("data/sa2.geojson")
-    return df, gdf
+df = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
+df["SA2_16_CODE"] = df["SA2_16_CODE"].astype(str)
 
-df, gdf = load_data()
+# Pivot for faster lookup
+pivot_df = df.pivot_table(index="SA2_16_CODE", columns="Mode", values="Persons", aggfunc="sum", fill_value=0)
 
-# Get unique modes
-all_modes = df["Mode"].unique().tolist()
-all_modes.sort()
+# Sidebar - Mode filter
+st.sidebar.title("Mode Filter")
+all_modes = sorted(df["Mode"].unique())
+if "selected_modes" not in st.session_state:
+    st.session_state.selected_modes = all_modes.copy()
 
-# Sidebar filters
-with st.sidebar:
-    st.header("Filter by Mode")
-
-    if "selected_modes" not in st.session_state:
+# Select/Deselect All button
+def toggle_select_all():
+    if set(st.session_state.selected_modes) == set(all_modes):
+        st.session_state.selected_modes = []
+    else:
         st.session_state.selected_modes = all_modes.copy()
 
-    # Select/Deselect all buttons
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("Select All"):
-            st.session_state.selected_modes = all_modes.copy()
-    with col2:
-        if st.button("Deselect All"):
-            st.session_state.selected_modes = []
+st.sidebar.button("Select/Deselect All", on_click=toggle_select_all)
 
-    # Mode checkbox list
-    selected = []
-    for mode in all_modes:
-        checked = mode in st.session_state.selected_modes
-        if st.checkbox(mode, checked=checked):
-            selected.append(mode)
-    st.session_state.selected_modes = selected
+# Checkbox list
+selected_modes = st.sidebar.multiselect("Choose modes", all_modes, default=st.session_state.selected_modes)
+st.session_state.selected_modes = selected_modes
 
-# Skip rest of app if nothing selected
-if not st.session_state.selected_modes:
-    st.warning("Please select at least one mode to view the map.")
-    st.stop()
+# Compute mode share
+if selected_modes:
+    pivot_df["Selected_Total"] = pivot_df[selected_modes].sum(axis=1)
+    pivot_df["Selected_Share"] = pivot_df["Selected_Total"] / pivot_df["Selected_Total"].sum() * 100
+else:
+    pivot_df["Selected_Total"] = 0
+    pivot_df["Selected_Share"] = 0
 
-# Calculate % share of selected modes per SA2
-selected_df = df[df["Mode"].isin(st.session_state.selected_modes)]
-sa2_total_selected = selected_df.groupby("SA2_16_CODE")["Persons"].sum().rename("Selected")
-sa2_total_all = df.groupby("SA2_16_CODE")["Persons"].sum().rename("AllModes")
-merged = pd.concat([sa2_total_selected, sa2_total_all], axis=1)
-merged["PercentShare"] = (merged["Selected"] / merged["AllModes"] * 100).round(2)
-lookup_percent = merged["PercentShare"].to_dict()
+# Map setup
+m = folium.Map(location=[-33.87, 151.05], zoom_start=10, control_scale=True, tiles="cartodbpositron")
 
-# Add PercentShare property to GeoJSON
-gdf["PercentShare"] = gdf["SA2_MAIN16"].map(lookup_percent)
-
-# Create Folium map
-m = folium.Map(
-    location=[-33.86, 151.0],  # Slightly west of Sydney CBD
-    zoom_start=10,
-    control_scale=True,
-    prefer_canvas=True,
-)
-
-# Define colormap
-max_percent = max(lookup_percent.values(), default=100)
-colormap = LinearColormap(
-    colors=["#e5f5e0", "#31a354"],
-    vmin=0,
-    vmax=max(100, max_percent),
-).to_step(10)
+# Color scale
+max_val = pivot_df["Selected_Share"].max()
+colormap = LinearColormap(colors=["#e5f5e0", "#31a354"], vmin=0, vmax=max_val)
 colormap.caption = "Selected Mode Share (%)"
 colormap.add_to(m)
 
-# Highlight selected zone
-highlight_function = lambda x: {"weight": 2, "fillOpacity": 0.7, "color": "black"}
+# Attach mode share to geojson features
+for feature in geojson_data["features"]:
+    sa2_code = str(feature["properties"]["SA2_MAIN16"])
+    value = pivot_df.loc[sa2_code, "Selected_Share"] if sa2_code in pivot_df.index else None
+    feature["properties"]["mode_share"] = value
 
-# Tooltip fields
-tooltip = folium.GeoJsonTooltip(
-    fields=["SA2_NAME16", "SA2_MAIN16", "PercentShare"],
-    aliases=["SA2 Name:", "SA2 Code:", "Selected Mode Share (%)"],
-    localize=True
+    # Store raw values as well
+    if sa2_code in pivot_df.index:
+        for mode in selected_modes:
+            feature["properties"][f"mode_{mode}"] = pivot_df.loc[sa2_code, mode]
+        feature["properties"]["selected_total"] = pivot_df.loc[sa2_code, "Selected_Total"]
+
+# Define styling
+def style_function(feature):
+    share = feature["properties"]["mode_share"]
+    return {
+        "fillOpacity": 0.7 if share is not None else 0,
+        "weight": 0.3,
+        "color": "black",
+        "fillColor": colormap(share) if share is not None else "transparent",
+    }
+
+# Add choropleth
+geojson_layer = folium.GeoJson(
+    geojson_data,
+    name="Mode Share",
+    style_function=style_function,
+    tooltip=folium.GeoJsonTooltip(
+        fields=["SA2_NAME16", "mode_share"],
+        aliases=["SA2", "Selected Share (%)"],
+        localize=True,
+        labels=True,
+        sticky=False,
+        toLocaleString=True,
+        style=("background-color: white; color: #333; font-size: 12px; padding: 5px;"),
+    ),
 )
 
-# Inject GeoJSON into map
-geojson = folium.GeoJson(
-    gdf,
-    name="SA2 Areas",
-    style_function=lambda feature: {
-        "fillColor": colormap(feature["properties"]["PercentShare"])
-        if feature["properties"]["PercentShare"] is not None else "#cccccc",
-        "color": "grey",
-        "weight": 0.5,
-        "fillOpacity": 0.7 if feature["properties"]["PercentShare"] is not None else 0,
-    },
-    tooltip=tooltip,
-    highlight_function=highlight_function
-)
-geojson.add_to(m)
+geojson_layer.add_to(m)
 
-# Row layout
-col_map, col_info = st.columns([3, 1])
+# Display map and capture click
+st_data = st_folium(m, width=1000, height=600)
 
-# Render map
-with col_map:
-    clicked = st_folium(m, width=900, height=600)
+# Show clicked feature info
+if st_data and st_data.get("last_active_drawing", None):
+    sa2_code_clicked = st_data["last_active_drawing"]["properties"]["SA2_MAIN16"]
+    sa2_name = st_data["last_active_drawing"]["properties"]["SA2_NAME16"]
 
-# Info panel on the right
-with col_info:
-    st.markdown("### SA2 Mode Share Breakdown")
+    st.markdown(f"### Mode Share for {sa2_name}")
+    if sa2_code_clicked in pivot_df.index:
+        clicked_row = pivot_df.loc[sa2_code_clicked]
+        total = clicked_row[selected_modes].sum()
+        table_data = {
+            "Mode": [],
+            "Persons": [],
+            "Share (%)": []
+        }
+        for mode in selected_modes:
+            count = clicked_row[mode]
+            share = (count / total * 100) if total > 0 else 0
+            table_data["Mode"].append(mode)
+            table_data["Persons"].append(int(count))
+            table_data["Share (%)"].append(round(share, 2))
 
-    if clicked and "last_active_drawing" in clicked:
-        props = clicked["last_active_drawing"]["properties"]
-        sa2_code = props["SA2_MAIN16"]
-        sa2_name = props["SA2_NAME16"]
-        st.markdown(f"**{sa2_name}** (Code: {sa2_code})")
-
-        zone_df = df[df["SA2_16_CODE"] == sa2_code].copy()
-        zone_df = zone_df.groupby("Mode")["Persons"].sum().reset_index()
-        total_selected = zone_df[zone_df["Mode"].isin(st.session_state.selected_modes)]["Persons"].sum()
-        if total_selected > 0:
-            zone_df["% Share (selected total)"] = zone_df["Persons"] / total_selected * 100
-        else:
-            zone_df["% Share (selected total)"] = 0
-
-        st.dataframe(zone_df.rename(columns={"Persons": "Persons (raw)"}), use_container_width=True)
+        breakdown_df = pd.DataFrame(table_data)
+        st.dataframe(breakdown_df, use_container_width=True)
     else:
-        st.info("Click a zone to see detailed mode share info.")
+        st.info("No data available for this SA2.")
