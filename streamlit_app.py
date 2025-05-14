@@ -90,8 +90,8 @@ if selected_modes:
             aliases=["SA2 Code: ", "SA2 Name: "],
             labels=True,
             sticky=True
-        )
-    ).add_to(m)
+        ).add_to(m)
+    )
 
     st_data = st_folium(m, width=700, height=600)
 
