@@ -6,57 +6,79 @@ from folium import Choropleth
 from streamlit_folium import st_folium
 from branca.colormap import linear
 
-# Sidebar: Select year
-st.sidebar.header("Settings")
-year = st.sidebar.radio("Select Year", ["2016", "2021"])
+# ---- Session state initialization ----
+if "select_all" not in st.session_state:
+    st.session_state.select_all = False
+if "selected_modes" not in st.session_state:
+    st.session_state.selected_modes = []
 
-# Define file paths
+# ---- Sidebar: Year toggle ----
+st.sidebar.header("Settings")
+year = st.sidebar.radio("Select Year", ["2016", "2021"], key="year")
+
+# ---- File paths based on year ----
 geojson_path = f"data/{year}_SA2.geojson"
 csv_path = f"data/{year}_SA2UR_Mode.csv"
 
-# Load data
+# ---- Load data ----
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
 df = pd.read_csv(csv_path, dtype={"SA2_CODE": str})
 
-# Sidebar: Mode selection
-st.sidebar.header("Mode Selector")
-all_modes = sorted(df["Mode"].unique())
-select_all = st.sidebar.checkbox("Select All Modes", value=False)
-selected_modes = st.sidebar.multiselect("Choose modes", all_modes, default=all_modes if select_all else [])
+# ---- Determine correct GeoJSON keys ----
+code_key = "SA2_MAIN16" if year == "2016" else "SA2_MAIN21"
+name_key = "SA2_NAME16" if year == "2016" else "SA2_NAME21"
 
-# Filter and process data
+# ---- Sidebar: Mode selector ----
+st.sidebar.header("Mode Selector")
+
+all_modes = sorted(df["Mode"].unique())
+
+# Update selected modes if select all is toggled
+if st.sidebar.checkbox("Select All Modes", value=st.session_state.select_all, key="select_all_checkbox"):
+    st.session_state.selected_modes = all_modes
+    st.session_state.select_all = True
+else:
+    st.session_state.select_all = False
+
+# Multiselect using session state
+selected_modes = st.sidebar.multiselect(
+    "Choose modes",
+    options=all_modes,
+    default=st.session_state.selected_modes,
+    key="mode_multiselect"
+)
+
+# Update stored selected modes
+st.session_state.selected_modes = selected_modes
+
+# ---- Main processing and map generation ----
 if selected_modes:
     filtered_data = df[df["Mode"].isin(selected_modes)].copy()
 
-    # Calculate total persons per SA2
     total_persons = filtered_data.groupby("SA2_CODE")["Persons"].sum().reset_index()
     total_persons.columns = ["SA2_CODE", "TotalPersons"]
     filtered_data = filtered_data.merge(total_persons, on="SA2_CODE", how="left")
     filtered_data["Percentage"] = (filtered_data["Persons"] / filtered_data["TotalPersons"]) * 100
 
-    # Mode for visualization
     mode_for_visual = st.sidebar.selectbox("Mode to Visualize", selected_modes)
 
-    # Get percentage for selected visual mode
     mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
     percentage_by_sa2 = mode_data.set_index("SA2_CODE")["Percentage"].to_dict()
 
-    # Filter out invalid values
     percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
     min_val, max_val = (min(percentages), max(percentages)) if percentages else (0, 1)
     if min_val == max_val:
-        max_val += 1  # Avoid zero range
+        max_val += 1
 
-    # Setup map
     m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="cartodbpositron")
     colormap = linear.Blues_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
 
     def style_function(feature):
-        sa2_code = feature["properties"]["SA2_MAIN16"]
+        sa2_code = feature["properties"][code_key]
         pct = percentage_by_sa2.get(sa2_code, 0)
         try:
             return {
@@ -73,7 +95,7 @@ if selected_modes:
                 "fillOpacity": 0.3,
             }
 
-    tooltip = folium.GeoJsonTooltip(fields=["SA2_MAIN16", "SA2_NAME16"])
+    tooltip = folium.GeoJsonTooltip(fields=[code_key, name_key])
 
     folium.GeoJson(
         geojson_data,
@@ -82,14 +104,12 @@ if selected_modes:
         tooltip=tooltip
     ).add_to(m)
 
-    # Show map
     st_data = st_folium(m, width=700, height=600)
 
-    # Show breakdown if a zone is clicked
     if st_data and st_data.get("last_active_drawing"):
         props = st_data["last_active_drawing"]["properties"]
-        clicked_code = props["SA2_MAIN16"]
-        clicked_name = props["SA2_NAME16"]
+        clicked_code = props[code_key]
+        clicked_name = props[name_key]
         clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
 
         if not clicked_data.empty:
