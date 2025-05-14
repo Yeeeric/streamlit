@@ -9,16 +9,12 @@ from branca.colormap import LinearColormap
 mode_share = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
 geojson_data = json.load(open("data/sa2.geojson"))
 
-# Check the structure of the GeoJSON data (for debugging purposes)
-st.write("GeoJSON Properties Example:")
-st.write(geojson_data['features'][0]['properties'])  # Display the properties of the first feature
-
-# Sidebar mode selection
+# Sidebar mode selection - Changed to checkboxes
 modes = mode_share["Mode"].unique()  # Correct capitalization for "Mode"
-selected_mode = st.sidebar.selectbox("Select a mode of transport", sorted(modes))
+selected_modes = st.sidebar.multiselect("Select modes of transport", sorted(modes), default=modes)
 
-# Filter data by selected mode
-filtered_data = mode_share[mode_share["Mode"] == selected_mode]
+# Filter data by selected modes
+filtered_data = mode_share[mode_share["Mode"].isin(selected_modes)]
 
 # Generate a folium map centered around a specific point (example: Sydney)
 m = folium.Map(location=[-33.8688, 151.2093], zoom_start=12)
@@ -62,12 +58,12 @@ geojson_layer = folium.GeoJson(
 st_data = st_folium(m, width=1000, height=600)
 
 # Mode share table on the right side
-st.sidebar.title(f"Mode Share for {selected_mode}")
+st.sidebar.title(f"Mode Share for {', '.join(selected_modes)}")  # Updated to show selected modes
 st.sidebar.write("Mode Share Breakdown:")
 
 # Create a table for the mode share data
 mode_share_table = filtered_data[['SA2_16', 'Persons', 'Ratio']]  # Correct column names
-mode_share_table['Percentage'] = (mode_share_table['Persons'] / mode_share_table['Ratio']) * 100  # Calculation for percentage
+mode_share_table['Percentage'] = (mode_share_table['Persons'] / mode_share_table['Persons'].sum()) * 100  # Corrected percentage calculation
 mode_share_table = mode_share_table[['SA2_16', 'Persons', 'Percentage']]
 
 # Show the table on the sidebar
@@ -78,6 +74,12 @@ if st_data and st_data.get("last_active_drawing", None):
     clicked_feature = st_data["last_active_drawing"]
     clicked_sa2_code = clicked_feature['properties']['SA2_MAIN16']  # Updated to 'SA2_MAIN16'
     clicked_sa2_name = clicked_feature['properties']['SA2_NAME16']  # Updated to 'SA2_NAME16'
+    
+    # Get data for clicked zone (filter by SA2 code)
     clicked_data = filtered_data[filtered_data['SA2_16'] == clicked_sa2_name]
-    st.write(f"Detailed Mode Share for {clicked_sa2_name} (Code: {clicked_sa2_code})")
-    st.write(clicked_data)
+    
+    if not clicked_data.empty:
+        st.write(f"Detailed Mode Share for {clicked_sa2_name} (Code: {clicked_sa2_code})")
+        st.write(clicked_data[['SA2_16', 'Persons', 'Mode', 'Percentage']])  # Show relevant columns
+    else:
+        st.write("No data available for the selected zone.")
