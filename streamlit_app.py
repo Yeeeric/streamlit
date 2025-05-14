@@ -50,8 +50,8 @@ if selected_modes:
     else:
         min_val, max_val = 0, 1
 
-    # Setup map
-    m = folium.Map(location=[-33.86, 151.10], zoom_start=12, tiles="cartodbpositron")
+    # Setup map with updated zoom and location
+    m = folium.Map(location=[-33.86, 151.10], zoom_start=11, tiles="cartodbpositron")
     colormap = linear.Blues_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
@@ -75,18 +75,10 @@ if selected_modes:
             }
 
     # Create tooltips with the percentage of the selected mode
-    tooltip = folium.GeoJsonTooltip(
-        fields=["SA2_MAIN16", "SA2_NAME16"],
-        aliases=["SA2 Code: ", "SA2 Name: "],
-        localize=True,
-        sticky=True,
-        labels=True
-    )
-    tooltip.add_to(folium.GeoJson(
-        geojson_data,
-        name="SA2",
-        style_function=style_function
-    ))
+    def get_tooltip(feature):
+        sa2_code = feature["properties"]["SA2_MAIN16"]
+        percentage = percentage_by_sa2.get(sa2_code, 0)
+        return folium.Tooltip(f"SA2: {feature['properties']['SA2_NAME16']} | {mode_for_visual} share: {percentage:.2f}%")
 
     # Add GeoJson data with tooltips
     folium.GeoJson(
