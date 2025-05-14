@@ -104,7 +104,7 @@ if selected_modes:
 
     # Layout container
     with st.container():
-        col1, col2 = st.columns([700, "auto"], gap="small")
+        col1, col2 = st.columns([3, 1], gap="small")
 
         with col1:
             st_data = st_folium(m, width=700, height=600)
