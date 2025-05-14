@@ -51,7 +51,7 @@ if selected_modes:
         min_val, max_val = 0, 1
 
     # Setup map
-    m = folium.Map(location=[-33.86, 151.21], zoom_start=10, tiles="cartodbpositron")
+    m = folium.Map(location=[-33.86, 151.10], zoom_start=12, tiles="cartodbpositron")
     colormap = linear.Blues_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
