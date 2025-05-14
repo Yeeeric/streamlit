@@ -7,8 +7,8 @@ from streamlit_folium import st_folium
 from branca.colormap import linear
 
 # Load data
-geojson_path = "data/sa2.geojson"
-csv_path = "data/data_Mode_Census_UR_SA2.csv"
+geojson_path = "data/2016_SA2.geojson"
+csv_path = "data/2016_SA2UR.csv"
 
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
