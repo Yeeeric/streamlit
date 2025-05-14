@@ -6,18 +6,22 @@ from folium import Choropleth
 from streamlit_folium import st_folium
 from branca.colormap import linear
 
-# Load data
-geojson_path = "data/2016_SA2.geojson"
-csv_path = "data/2016_SA2UR_Mode.csv"
+# Sidebar: Select year
+st.sidebar.header("Settings")
+year = st.sidebar.radio("Select Year", ["2016", "2021"])
 
+# Define file paths
+geojson_path = f"data/{year}_SA2.geojson"
+csv_path = f"data/{year}_SA2UR_Mode.csv"
+
+# Load data
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
 df = pd.read_csv(csv_path, dtype={"SA2_CODE": str})
 
-# Sidebar filters
+# Sidebar: Mode selection
 st.sidebar.header("Mode Selector")
-
 all_modes = sorted(df["Mode"].unique())
 select_all = st.sidebar.checkbox("Select All Modes", value=False)
 selected_modes = st.sidebar.multiselect("Choose modes", all_modes, default=all_modes if select_all else [])
@@ -41,14 +45,9 @@ if selected_modes:
 
     # Filter out invalid values
     percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
-
-    if percentages:
-        min_val = min(percentages)
-        max_val = max(percentages)
-        if min_val == max_val:
-            max_val += 1  # Avoid zero range
-    else:
-        min_val, max_val = 0, 1
+    min_val, max_val = (min(percentages), max(percentages)) if percentages else (0, 1)
+    if min_val == max_val:
+        max_val += 1  # Avoid zero range
 
     # Setup map
     m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="cartodbpositron")
