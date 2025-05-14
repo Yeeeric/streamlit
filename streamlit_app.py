@@ -13,7 +13,7 @@ csv_path = "data/2016_SA2UR_Mode.csv"
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
-df = pd.read_csv(csv_path)
+df = pd.read_csv(csv_path, dtype={"SA2_CODE": str})
 
 # Sidebar filters
 st.sidebar.header("Mode Selector")
