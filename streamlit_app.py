@@ -13,8 +13,8 @@ st.title("Travel Mode Share by SA2")
 # Load data
 @st.cache_data
 def load_data():
-    mode_share = pd.read_csv("data/mode_share_by_sa2.csv")
-    geojson_data = json.load(open("data/sa2_2021_simple.json"))
+    mode_share = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
+    geojson_data = json.load(open("data/sa2.geojson"))
     return mode_share, geojson_data
 
 mode_share_df, geojson_data_raw = load_data()
