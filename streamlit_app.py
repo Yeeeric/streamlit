@@ -9,26 +9,46 @@ from branca.colormap import LinearColormap
 mode_share = pd.read_csv("data/data_Mode_Census_UR_SA2.csv")
 geojson_data = json.load(open("data/sa2.geojson"))
 
-# Sidebar mode selection - Changed to checkboxes
-modes = mode_share["Mode"].unique()  # Correct capitalization for "Mode"
-selected_modes = st.sidebar.multiselect("Select modes of transport", sorted(modes), default=modes)
+# Sidebar mode selection - Checkbox for each mode with a 'select all' option
+modes = mode_share["Mode"].unique()
+select_all = st.sidebar.checkbox("Select All Modes", value=False)
+selected_modes = []
+
+if select_all:
+    selected_modes = modes.tolist()
+else:
+    for mode in modes:
+        if st.sidebar.checkbox(mode, value=False):  # By default, all are deselected
+            selected_modes.append(mode)
 
 # Filter data by selected modes
 filtered_data = mode_share[mode_share["Mode"].isin(selected_modes)]
 
-# Generate a folium map centered around a specific point (example: Sydney)
+# Calculate the percentage based on selected modes
+if not filtered_data.empty:
+    mode_share_table = filtered_data[['SA2_16', 'Persons', 'Ratio']]  # Correct column names
+    mode_share_table['Percentage'] = (mode_share_table['Persons'] / filtered_data['Persons'].sum()) * 100  # Percentage of selected modes
+else:
+    mode_share_table = pd.DataFrame(columns=['SA2_16', 'Persons', 'Percentage'])
+
+# Sidebar table for mode share data
+st.sidebar.title(f"Mode Share for {', '.join(selected_modes) if selected_modes else 'None selected'}")
+st.sidebar.write(mode_share_table)
+
+# Create a folium map centered around a specific point (example: Sydney)
 m = folium.Map(location=[-33.8688, 151.2093], zoom_start=12)
 
 # Add GeoJSON layer to the map
 geojson_layer = folium.GeoJson(geojson_data).add_to(m)
 
 # Create a color scale from white to blue, with null values set to transparent
-colormap = LinearColormap(colors=['white', 'blue'], vmin=filtered_data['Persons'].min(), vmax=filtered_data['Persons'].max())
+colormap = LinearColormap(colors=['white', 'blue'], vmin=filtered_data['Persons'].min() if not filtered_data.empty else 0, 
+                           vmax=filtered_data['Persons'].max() if not filtered_data.empty else 0)
 
 # Function to add style to GeoJSON features
 def style_function(feature):
     # Match the SA2 code with the geojson data
-    sa2_code = feature['properties']['SA2_MAIN16']  # Updated to use 'SA2_MAIN16'
+    sa2_code = feature['properties']['SA2_MAIN16']
     person_count = filtered_data[filtered_data['SA2_16_CODE'] == sa2_code]['Persons'].values[0] if not filtered_data[filtered_data['SA2_16_CODE'] == sa2_code].empty else None
     if person_count is None:
         # If person_count is None (null), make the area transparent
@@ -56,18 +76,6 @@ geojson_layer = folium.GeoJson(
 
 # Display map in Streamlit
 st_data = st_folium(m, width=1000, height=600)
-
-# Mode share table on the right side
-st.sidebar.title(f"Mode Share for {', '.join(selected_modes)}")  # Updated to show selected modes
-st.sidebar.write("Mode Share Breakdown:")
-
-# Create a table for the mode share data
-mode_share_table = filtered_data[['SA2_16', 'Persons', 'Ratio']]  # Correct column names
-mode_share_table['Percentage'] = (mode_share_table['Persons'] / mode_share_table['Persons'].sum()) * 100  # Corrected percentage calculation
-mode_share_table = mode_share_table[['SA2_16', 'Persons', 'Percentage']]
-
-# Show the table on the sidebar
-st.sidebar.write(mode_share_table)
 
 # When a zone is clicked, display detailed mode share breakdown
 if st_data and st_data.get("last_active_drawing", None):
