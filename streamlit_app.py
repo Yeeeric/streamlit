@@ -81,7 +81,7 @@ if selected_modes:
         return folium.Tooltip(f"SA2: {feature['properties']['SA2_NAME16']} | {mode_for_visual} share: {percentage:.2f}%")
 
     # Add GeoJson data with tooltips
-    folium.GeoJson(
+    geojson_layer = folium.GeoJson(
         geojson_data,
         name="SA2",
         style_function=style_function,
@@ -90,9 +90,10 @@ if selected_modes:
             aliases=["SA2 Code: ", "SA2 Name: "],
             labels=True,
             sticky=True
-        ).add_to(m)
-    )
+        )  # The tooltip is now correctly passed to GeoJson
+    ).add_to(m)
 
+    # Pass the map to Streamlit for rendering
     st_data = st_folium(m, width=700, height=600)
 
     # Show breakdown if a zone is clicked
