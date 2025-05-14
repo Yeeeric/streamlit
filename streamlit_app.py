@@ -83,20 +83,26 @@ if selected_modes:
         tooltip=tooltip
     ).add_to(m)
 
-    st_data = st_folium(m, width=700, height=600)
+    col1, col2 = st.columns([2, 1])  # Wider map, narrower table
 
-    # Show breakdown if a zone is clicked
-    if st_data and st_data.get("last_active_drawing"):
-        props = st_data["last_active_drawing"]["properties"]
-        clicked_code = props["SA2_MAIN16"]
-        clicked_name = props["SA2_NAME16"]
-        clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
+    with col1:
+        st_data = st_folium(m, width=700, height=600)
 
-        if not clicked_data.empty:
-            clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
-            st.write(f"Detailed Mode Share for {clicked_name} (Code: {clicked_code})")
-            st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2))
-        else:
-            st.write("No data available for the selected zone.")
+    with col2:
+        if st_data and st_data.get("last_active_drawing"):
+            props = st_data["last_active_drawing"]["properties"]
+            clicked_code = props["SA2_MAIN16"]
+            clicked_name = props["SA2_NAME16"]
+            clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
+
+            if not clicked_data.empty:
+                clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
+                st.markdown(f"**Detailed Mode Share for {clicked_name}**  
+                             *(Code: {clicked_code})*")
+                st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
+                             use_container_width=True)
+            else:
+                st.info("No data available for the selected zone.")
+
 else:
     st.warning("Please select at least one mode.")
