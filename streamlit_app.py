@@ -6,6 +6,9 @@ from folium import Choropleth
 from streamlit_folium import st_folium
 from branca.colormap import linear
 
+# Set wide layout
+st.set_page_config(layout="wide")
+
 # Load data
 geojson_path = "data/2016_SA2.geojson"
 csv_path = "data/2016_SA2UR_Mode.csv"
@@ -83,10 +86,10 @@ if selected_modes:
         tooltip=tooltip
     ).add_to(m)
 
-    col1, col2 = st.columns([2, 1])  # Wider map, narrower table
+    col1, col2 = st.columns([3, 2])  # Wider map, narrower table
 
     with col1:
-        st_data = st_folium(m, width=700, height=600)
+        st_data = st_folium(m, height=600)  # Removed fixed width
 
     with col2:
         if st_data and st_data.get("last_active_drawing"):
@@ -97,7 +100,10 @@ if selected_modes:
 
             if not clicked_data.empty:
                 clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
-                st.markdown(f"**Detailed Mode Share for {clicked_name}**\n*(Code: {clicked_code})*")
+                st.markdown(f"""
+                    **Detailed Mode Share for {clicked_name}**  
+                    *(Code: {clicked_code})*
+                """)
                 st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
                              use_container_width=True)
             else:
