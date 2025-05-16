@@ -4,5 +4,3 @@ folium
 streamlit-folium
 branca
 numpy
-keplergl
-streamlit-keplergl
