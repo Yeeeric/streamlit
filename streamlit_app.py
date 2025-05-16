@@ -77,8 +77,11 @@ if selected_modes:
     if min_val == max_val:
         max_val += 1
 
-    m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="cartodbpositron")
-    colormap = linear.Blues_09.scale(min_val, max_val)
+    # Use dark tiles for the map
+    m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="CartoDB dark_matter")
+
+    # Use a color scale that stands out on dark backgrounds
+    colormap = linear.YlGnBu_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
 
@@ -88,15 +91,15 @@ if selected_modes:
         try:
             return {
                 "fillColor": colormap(pct),
-                "color": "black",
-                "weight": 0.3,
+                "color": "white",          # lighter border for dark bg
+                "weight": 0.5,
                 "fillOpacity": 0.7,
             }
         except ValueError:
             return {
-                "fillColor": "#cccccc",
-                "color": "black",
-                "weight": 0.3,
+                "fillColor": "#444444",
+                "color": "white",
+                "weight": 0.5,
                 "fillOpacity": 0.3,
             }
 
