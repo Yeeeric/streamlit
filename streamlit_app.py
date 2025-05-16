@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import json
-from keplergl import KeplerGl
-from streamlit_keplergl import keplergl_static
+import folium
+from folium import Choropleth
+from streamlit_folium import st_folium
+from branca.colormap import linear
 
 # ---- Session state initialization ----
 if "select_all" not in st.session_state:
@@ -56,7 +58,7 @@ for mode in all_modes:
 # Update session state
 st.session_state.selected_modes = selected_modes
 
-# ---- Main processing and Kepler map generation ----
+# ---- Main processing and map generation ----
 if selected_modes:
     filtered_data = df[df["Mode"].isin(selected_modes)].copy()
 
@@ -67,22 +69,60 @@ if selected_modes:
 
     mode_for_visual = st.sidebar.selectbox("Mode to Visualize", selected_modes)
 
-    # Aggregate percentage for selected mode
     mode_data = filtered_data[filtered_data["Mode"] == mode_for_visual]
     percentage_by_sa2 = mode_data.set_index("SA2_CODE")["Percentage"].to_dict()
 
-    # Add percentage to geojson properties
-    for feature in geojson_data["features"]:
+    percentages = [v for v in percentage_by_sa2.values() if pd.notnull(v) and v >= 0]
+    min_val, max_val = (min(percentages), max(percentages)) if percentages else (0, 1)
+    if min_val == max_val:
+        max_val += 1
+
+    m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="cartodbpositron")
+    colormap = linear.Blues_09.scale(min_val, max_val)
+    colormap.caption = f"Percentage of {mode_for_visual}"
+    colormap.add_to(m)
+
+    def style_function(feature):
         sa2_code = feature["properties"][code_key]
-        feature["properties"]["Percentage"] = round(percentage_by_sa2.get(sa2_code, 0), 2)
+        pct = percentage_by_sa2.get(sa2_code, 0)
+        try:
+            return {
+                "fillColor": colormap(pct),
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.7,
+            }
+        except ValueError:
+            return {
+                "fillColor": "#cccccc",
+                "color": "black",
+                "weight": 0.3,
+                "fillOpacity": 0.3,
+            }
 
-    # Create and show Kepler.gl map
-    kepler_map = KeplerGl(height=600)
-    kepler_map.add_data(data=geojson_data, name="SA2 Mode Share")
-    keplergl_static(kepler_map)
+    tooltip = folium.GeoJsonTooltip(fields=[code_key, name_key])
 
-    # Handle clicks (Kepler doesn’t support built-in click-to-filter)
-    st.markdown("Use the Kepler interface to explore data interactively.")
+    folium.GeoJson(
+        geojson_data,
+        name="SA2",
+        style_function=style_function,
+        tooltip=tooltip
+    ).add_to(m)
 
+    st_data = st_folium(m, width=700, height=600)
+
+    if st_data and st_data.get("last_active_drawing"):
+        props = st_data["last_active_drawing"]["properties"]
+        clicked_code = props[code_key]
+        clicked_name = props[name_key]
+        clicked_data = filtered_data[filtered_data["SA2_CODE"] == clicked_code]
+
+        if not clicked_data.empty:
+            clicked_data["Percentage"] = (clicked_data["Persons"] / clicked_data["TotalPersons"]) * 100
+            st.markdown(f"**Detailed Mode Share for {clicked_name}**\n*(Code: {clicked_code})*")
+            st.dataframe(clicked_data[["SA2", "Mode", "Persons", "Percentage"]].round(2),
+                         use_container_width=True)
+        else:
+            st.info("No data available for the selected zone.")
 else:
     st.warning("Please select at least one mode.")
