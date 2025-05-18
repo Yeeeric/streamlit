@@ -4,7 +4,7 @@ import json
 import folium
 from folium import Choropleth
 from streamlit_folium import st_folium
-from branca.colormap import linear
+from branca.colormap import LinearColormap
 
 # ---- Session state initialization ----
 if "select_all" not in st.session_state:
@@ -80,8 +80,12 @@ if selected_modes:
     # Use dark tiles for the map
     m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="CartoDB dark_matter")
 
-    # Use a color scale that stands out on dark backgrounds
-    colormap = linear.Inferno_09.scale(min_val, max_val)
+    # Custom Inferno-like colormap for dark background
+    colormap = LinearColormap(
+        colors=["#000004", "#420a68", "#932667", "#dd513a", "#fca50a", "#fcffa4"],
+        vmin=min_val,
+        vmax=max_val
+    )
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
 
