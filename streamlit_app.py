@@ -81,7 +81,7 @@ if selected_modes:
     m = folium.Map(location=[-33.86, 151.01], zoom_start=10, tiles="CartoDB dark_matter")
 
     # Use a color scale that stands out on dark backgrounds
-    colormap = linear.YlGnBu_09.scale(min_val, max_val)
+    colormap = linear.Inferno_09.scale(min_val, max_val)
     colormap.caption = f"Percentage of {mode_for_visual}"
     colormap.add_to(m)
 
