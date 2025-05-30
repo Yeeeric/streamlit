@@ -49,26 +49,26 @@ else:
 st.sidebar.header("Mode Selector")
 all_modes = sorted(df["Mode"].unique())
 
-# Update selected modes if "Select All" is toggled
-if st.sidebar.checkbox("Select All Modes", value=st.session_state.select_all, key="select_all_checkbox"):
-    st.session_state.selected_modes = all_modes
+# ---- Select All toggle and control checkboxes ----
+select_all_clicked = st.sidebar.checkbox("Select All Modes", value=st.session_state.select_all, key="select_all_checkbox")
+
+if select_all_clicked and not st.session_state.select_all:
+    for mode in all_modes:
+        st.session_state[f"chk_{mode}"] = True
     st.session_state.select_all = True
-else:
+elif not select_all_clicked and st.session_state.select_all:
+    for mode in all_modes:
+        st.session_state[f"chk_{mode}"] = False
     st.session_state.select_all = False
 
-# Manual checkbox selection for each mode
+# ---- Manual checkbox selection for each mode ----
 selected_modes = []
 st.sidebar.write("Choose modes:")
 for mode in all_modes:
-    if mode not in st.session_state:
-        st.session_state[mode] = mode in st.session_state.selected_modes
-
-    checked = st.sidebar.checkbox(mode, value=st.session_state[mode], key=f"chk_{mode}")
+    checked = st.sidebar.checkbox(mode, value=st.session_state.get(f"chk_{mode}", False), key=f"chk_{mode}")
     if checked:
         selected_modes.append(mode)
-    st.session_state[mode] = checked
 
-# Update session state
 st.session_state.selected_modes = selected_modes
 
 # ---- Main processing and map generation ----
