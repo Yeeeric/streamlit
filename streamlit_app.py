@@ -19,8 +19,15 @@ year = st.sidebar.radio("Select Year", ["2016", "2021"], key="year")
 
 # ---- File paths based on year and geography ----
 geojson_path = f"data/{year}_{geo_level}.geojson"
-csv_suffix = "POW_Mode" if geo_level == "DZN" else "SA2UR_Mode"
-csv_path = f"data/{year}_{geo_level}{csv_suffix}.csv"
+
+csv_file_map = {
+    ("2016", "SA2"): "data/2016_SA2UR_Mode.csv",
+    ("2021", "SA2"): "data/2021_SA2UR_Mode.csv",
+    ("2016", "DZN"): "data/2016_DZNPOW_Mode.csv",
+    ("2021", "DZN"): "data/2021_DZNPOW_Mode.csv",
+}
+
+csv_path = csv_file_map[(year, geo_level)]
 
 # ---- Load GeoJSON ----
 with open(geojson_path, "r", encoding="utf-8") as f:
